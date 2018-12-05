@@ -1,0 +1,123 @@
+*********************************************************************
+    chcsv version 2.0, Copyright (C) 1995 Batayan.
+
+    chcsv is distributed under the GNU General Public License.
+    chcsv comes with ABSOLUTELY NO WARRANTY.
+    This is free software, and you are welcome to redistribute it
+    under certain conditions, GPL.
+
+*********************************************************************
+
+chcsv   ＳＱＬ文を実行し、ＳＱＬ文がＳＥＬＥＣＴ文の場合は、
+　　　  ＣＳＶ形式でファイルか標準出力へ出力する。
+
+Usage: chcsv    userid/password
+                [-o Output Filename]
+                [-a Appended Output Filename]
+                [-i Input Filename]
+                [-e Enclosure]
+                [-t Terminater]
+                [-l Long Type Size]
+                [-f Array size of fetch]
+                [-b Buffer size of output]
+                [-v] [-n] [-h]
+                [const] [const] ....
+
+オプション説明
+     userid/password : かならず第一引き数に指定する。
+                       リモートログインの場合は userid/password@remote-host
+
+     -o : 出力ファイルを指定する。指定がなければ標準出力に出力する
+ 
+     -a : 出力ファイルに追加(Append)する場合に指定する
+
+     -i : ＳＱＬ文を記述したファイルを指定する。
+          指定がなければ標準入力から入力する。
+          
+     -e : データを囲む文字を指定する。指定がなければなにもつけない。
+          ただしNUMBER型項目にはつけない。
+     
+     -t : データの区切り文字を指定する。指定がなければ , (カンマ)
+          を使用する。
+          
+     -l : LONG型データのデータ長をバイト単位で指定する。
+          指定がなければ1024バイトとなる。
+
+     -f : FETCH 配列サイズを指定する。指定がなければ1000行。
+
+     -b : 出力バッファサイズ（単位：行)を指定する。指定がなければ1000行。
+
+     -h : ヘッダーを先頭行に付加する。
+
+     -v : データを縦並びに出力する
+
+     -n : １件もデータがない場合、０以外のステータスで終了する。
+
+     [const]: 結合変数をＳＱＬ文中に使用した場合、その内容を指定する。
+          指定がなければ会話形式で標準入力より指定する。
+
+機能説明
+　chcsv は入力ファイルのＳＱＬ文を実行する。ＳＱＬ文がＳＥＬＥＣＴ文
+の場合は、ＣＳＶ形式でファイルか標準出力へ出力する。
+
+　ＳＱＬ文中にはコメントが記述できる。コメントは /* から */までので区切る。
+
+  ＳＱＬ文中のＷＨＥＲＥ句の中に、結合変数を指定することができる。結合変数
+は'&'で始まる２０字以内の文字列を指定する。結合変数を使用した場合は、実行
+時のコマンド引き数にその内容を指定する。指定がない場合は会話形式で入力する
+が、その場合は -i オプションを使用してＳＱＬ文を記述したファイルを指定しな
+ければならない。（-i オプションを使用しないと標準入力よりＳＱＬ文を入力す
+るため）
+  例えばＳＱＬ文中に結合変数を３つ以上指定して、コマンド引き数に２つしか内容
+を指定しなかった場合は、３つ以降を会話形式で入力する。
+
+使用例
+
+１．通常のＣＳＶファイル形式で標準出力に出力する。
+
+    $ echo "select user,sysdate from dual" | chcsv scott/tiger
+    SCOTT,01-JAN-95
+
+２．データを " で囲んで file1 に出力する。
+
+   $ echo "select user,sysdate from dual" | chcsv scott/tiger -e\" -o file1
+   $ cat file1
+   "SCOTT","01-JAN-95"
+
+３．test.sqlのＳＱＬ文を実行し、test.outに出力する。また結合変数を使用する。
+
+  $ cat test.sql
+  select * from emp
+  where empno = &empno
+
+  $ chcsv scott/tiger -e\" 7900
+  7900,"JAMES","CLERK",7698,"81-12-03",950,,30
+
+
+バージョン情報
+
+2.0  1999-3-29
+     配列FETCH 機能追加。
+     -h , -a オプション追加。
+
+1.5  1997-05-31
+     Date type が９桁で切れてしまうバグを修正
+
+1.2  1996-07-31
+     オプション解析のバグ修正
+
+1.1  1995-03-31
+     SELECT 文以外のＳＱＬ文も処理出来るようにした。
+
+1.00 1995-01-31
+     初期版
+
+
+****************************************************************
+    If you have any PROBLEMS with chcsv, or find BUGS, please mailto
+
+        kawabata@personal.email.ne.jp  (Batayan)
+
+    Thank you !!!
+****************************************************************
+~

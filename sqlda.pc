@@ -1,0 +1,386 @@
+/**
+*  sqlda.pc  -  Analyze and execute sql-sentence.
+*
+*   Copyright (C) 1995 Batayan. (kawabata@personal.email.ne.jp)
+*
+*  This program is free software; you can redistribute it and/or modify
+*  it under the terms of the GNU General Public License as published by
+*  the Free Software Foundation; either version 2 of the License, or
+*  any later version.
+*
+*  This program is distributed in the hope that it will be useful,
+*  but WITHOUT ANY WARRANTY; without even the implied warranty of
+*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*  GNU General Public License for more details.
+*
+*  You should have received a copy of the GNU General Public License
+*  along with this program; if not, write to the Free Software
+*  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+*
+*  1999/3/11 Update: for ARRAY FETCH by Batayan.
+*
+**/
+
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _SQLEXTERN_
+#include "extern.h"
+
+#define SQLCA_STORAGE_CLASS extern
+EXEC SQL INCLUDE sqlca.h;
+EXEC SQL INCLUDE sqlda.h;
+EXEC SQL INCLUDE sqlhead.h;
+EXEC SQL INCLUDE chcsv.h;
+
+SQLDA* sqlclu();
+SQLDA* sqlald();
+
+/**
+  sqlda()
+**/
+int
+SetDA(char *buf)
+{
+EXEC SQL BEGIN DECLARE SECTION;
+    char *SQLSTR;
+EXEC SQL END DECLARE SECTION;
+
+    int prec, scale;  /* Precision and scale */
+    int numlen;       /* Size for number type to be changed to char type */
+    int sts;          /* Return status from functions */
+    char value[256];  /* Buffer for combined variables from standard input */
+    int ValueFlg = 1; /* Flag where arguments have combined variables */
+                      /* 1:It has  0:It doesn't */
+    int i,j;
+    char *header;     /* To output header */
+    int  ptr;         /* To output header */
+
+    strcpy(FUNCTION, "SetDA");
+#ifdef DEBUG
+fprintf(debug, "SetDA:");
+#endif
+    SQLSTR = buf;   /* Set input sql sentence */
+    bdp = sqlald(bdSize, bvSize, 0); /* Allocate combined declaration */
+    sdp = sqlald(sdSize, svSize, 0); /* Allocate selected declaration */
+    sdp->N = 0;
+/* Alalize sql sentence */
+    EXEC SQL PREPARE S FROM :SQLSTR;
+    if( sqlca.sqlcode ){
+        OraErr("PREPARE", sqlca.sqlcode);
+    }
+    EXEC SQL DECLARE C CURSOR FOR S;
+    if( sqlca.sqlcode ){
+        OraErr("DECLARE", sqlca.sqlcode);
+    }
+/* Describe combined declaration to bdp */
+    bdp->N = bdSize;
+    EXEC SQL DESCRIBE BIND VARIABLES FOR S INTO bdp;
+    if( sqlca.sqlcode ){
+        OraErr("DESCRIBE BIND", sqlca.sqlcode);
+    }
+    if( bdp->F < 0 ){
+        sqlclu(bdp);
+        bdp = sqlald(-(bdp->F), bvSize, 0);
+        EXEC SQL DESCRIBE BIND VARIABLES FOR S INTO bdp;
+        if( sqlca.sqlcode ){
+            OraErr("DESCRIBE BIND", sqlca.sqlcode);
+        }
+    }
+
+    bdp->N = bdp->F;
+#ifdef DEBUG
+fprintf(debug, "dbp1:");
+printda( bdp, 0 , "NSMC",0);
+#endif
+/* Set combined variables */
+    for( i = 0; i < bdp->F; i++ ){
+/* Check if it has more combined variables */
+        if( ValueFlg == 1 ){
+            if( *(VALUE + i) == NULL ){
+                ValueFlg = 0;
+            }
+        }
+/* In case it has more combined variables */
+        if( ValueFlg == 1 ){
+            bdp->V[i] = (char *)calloc(sizeof(char), strlen(*(VALUE + i)) + 1);
+            if( bdp->V[i] == NULL ){
+                SysOraErr("bdp->V[i]");
+            }
+            strcpy( bdp->V[i], *(VALUE + i) );
+        }
+/* When it doesn't have combined variables */
+        else{
+/* When "-i" option is not indicated */
+            if( INFILE == NULL ){
+                SysOraErr("Not Specify combined variables");
+            }
+/* Input combined variables from standard input */
+            GetValue( value, bdp->C[i], bdp->S[i] );
+            bdp->V[i] = (char *)calloc(sizeof(char), strlen(value) + 1);
+            if( bdp->V[i] == NULL ){
+                SysOraErr("bdp->V[i]");
+            }
+            strcpy(bdp->V[i], value);
+        }
+        bdp->T[i] = 1;
+        bdp->L[i] = strlen(bdp->V[i]);
+        bdp->I[i] = 0;
+#ifdef DEBUG
+fprintf(debug,"bdp %d: ", i);
+printda(bdp, i , "NSMC", 0);
+#endif
+    }
+/* Open cursor */
+    EXEC SQL OPEN C USING DESCRIPTOR bdp;
+    if( sqlca.sqlcode ){
+        OraErr("OPEN C", sqlca.sqlcode);
+    }
+/* Set selected declaration: sdp */
+    sdp->N = sdSize;
+    EXEC SQL DESCRIBE SELECT LIST FOR S INTO sdp;
+    if( sqlca.sqlcode ){
+        OraErr("DESCRIBE SELECT", sqlca.sqlcode);
+    }
+    if( sdp->F < 0 ){
+        sqlclu(sdp);
+        sdp = sqlald(-(sdp->F), 10, 0);
+        EXEC SQL DESCRIBE SELECT LIST FOR S INTO sdp;
+        if( sqlca.sqlcode ){
+            OraErr("DESCRIBE SELECT", sqlca.sqlcode);
+        }
+    }
+    sdp->N = sdp->F;
+/* Allocate memories for each selected list order by their types */
+    numflg = (int *)calloc(sizeof(int), sdp->N );
+    if( numflg == NULL ){
+        SysOraErr("numflg");
+    }
+    
+    OUTBUFSIZE = 0;
+
+    for( i = 0; i < sdp->N; i++ ){
+        *( numflg + i ) = sdp->T[i] & 0xff;
+        sqlprc( &sdp->L[i], &prec, &scale );
+#ifdef DEBUG
+fprintf(debug,"sdp %d: ", i );
+printda( sdp, i , "NSMC",0 );
+fprintf(debug,"numflg[%d]=%d prec=%d scale=%d\n",i,*(numflg+i),prec,scale);
+#endif
+        switch( *( numflg + i ) ){
+        case (short)1:  /* CHAR */
+            sdp->L[i]++;  /* For NULL terminator, need one more byte */
+            sdp->V[i] = (char *)calloc(FETCH_ARRAY * sizeof(char), sdp->L[i] + 1);
+            if( sdp->V[i] == NULL ){
+                SysOraErr("sdp->V[i]");
+            }
+            sdp->T[i] = 5; /* NULL */
+            break;
+        case (short)2:  /* NUMBER (Change to char) */
+            numlen = prec;
+            if( prec == 0 ){
+                numlen = 40; /* Oracle would support 40 scale */
+            }else if( scale < 0 ){
+                numlen = numlen - scale;
+            }
+            numlen += 2;
+            sdp->L[i] = numlen + 1;
+            sdp->V[i] = (char *)calloc(FETCH_ARRAY, sdp->L[i]);
+            if( sdp->V[i] == NULL ){
+                SysOraErr("sdp->V[i]");
+            }
+            sdp->T[i] = 5;
+            break;
+        case (short)8:   /* LONG */
+        case (short)24:  /* LONG ROW */
+            sdp->L[i] = LONGSIZE + 1;
+            sdp->V[i] = (char *)calloc(FETCH_ARRAY * sizeof(char), sdp->L[i] + 1);
+            if( sdp->V[i] == NULL ){
+                SysOraErr("sdp->V[i]");
+            }
+            sdp->T[i] = 5; /* NULL */
+            break;
+        case (short)13:  /* DATE (If errors) */
+            sdp->T[i] = 12;
+        case (short)12:  /* DATE */
+            sdp->L[i] = 256;
+            sdp->V[i] = (char *)calloc(FETCH_ARRAY * sizeof(char), sdp->L[i] + 1);
+            if( sdp->V[i] == NULL ){
+                SysOraErr("sdp->V[i]");
+            }
+            sdp->T[i] = 5;
+            break;
+        case (short)11: /* ROWID */
+            sdp->L[i] = 19;
+            sdp->V[i] = (char *)calloc(FETCH_ARRAY * sizeof(char), sdp->L[i] + 1);
+            if( sdp->V[i] == NULL ){
+                SysOraErr("sdp->V[i]");
+            }
+            sdp->T[i] = 5;
+            break;
+        default:
+            sdp->L[i]++;
+            sdp->T[i] = 5;
+            sdp->V[i] = (char *)calloc(FETCH_ARRAY * sizeof(char), sdp->L[i] + 1);
+            if( sdp->V[i] == NULL ){
+                SysOraErr("sdp->V[i]");
+            }
+            break;
+        }
+        OUTBUFSIZE += sdp->L[i] + 3; /* Increment Buffer Size of output per one record */
+        HEADERSIZE += sdp->C[i] + 3; /* Increment Buffer Size of header */
+
+        sdp->I[i] = (short *)calloc(FETCH_ARRAY, sizeof(short));
+        if( sdp->I[i] == NULL ){
+            SysOraErr("sdp->I[i]");
+        }
+    }
+#ifdef DEBUG
+fprintf(debug, "OUTBUFSIZE/1record=%d OUTRECORDS=%d\n", OUTBUFSIZE, OUTRECORDS);
+#endif
+
+ /* Total buffer size of output is to multiply (max length of one record) and OUTRECORDS */
+    OUTBUFSIZE *= OUTRECORDS;
+
+/* Output HEADER */
+    if( HEADER ){
+        if( (header = (char*)malloc(HEADERSIZE)) == NULL ){
+            SysOraErr("header");
+        }
+        ptr = 0;
+        for( i = 0; i < sdp->N; i++ ){
+            if( ENCLOSE != (char)NULL ){
+                *(header + ptr++) = ENCLOSE;
+            }
+            strncpy((header + ptr), sdp->S[i], sdp->C[i]);
+            ptr += sdp->C[i];
+            if( ENCLOSE != (char)NULL ){
+                *(header + ptr++) = ENCLOSE;
+            }
+            if( i != sdp->N -1 ){
+                *(header + ptr++) = TERMINATE;
+            }
+        }
+        *(header + ptr++) = '\n';
+        *(header + ptr) = (char)NULL;
+        if( write(fdout, header, ptr) != ptr ){
+            SysOraErr("write");
+        }
+        free(header);
+    }
+
+    return 0;
+}
+
+/**
+  FETCH
+**/
+int
+FetDA()
+{
+    int i;
+    int records = 0;
+
+    strcpy(FUNCTION, "FetDA");
+
+#ifdef DEBUG
+fprintf(debug, "FetDA:FETCH_ARRAY=%d\n", FETCH_ARRAY);
+#endif
+
+    OUTBUF = (char *)calloc(sizeof(char), OUTBUFSIZE);
+    if( OUTBUF == NULL ){
+        SysOraErr("OUTBUF");
+    }
+#ifdef DEBUG
+fprintf(debug, "calloc got %d bytes memory\n", OUTBUFSIZE);
+#endif
+
+    BUFFERED = 0; /* Clean Buffer */
+    OUTBYTE = 0;  /* Clean Buffer */
+    while(1){
+        EXEC SQL FOR :FETCH_ARRAY FETCH C USING DESCRIPTOR sdp;
+#ifdef DEBUG
+fprintf(debug, "FETCH errd[2]=%d\n", sqlca.sqlerrd[2]);
+#endif
+        if( sqlca.sqlcode != SUCCESS && sqlca.sqlcode != NODATA ){
+            OraErr( "FETCH", sqlca.sqlcode );
+        }
+        if( sqlca.sqlcode == NODATA ){
+            records = sqlca.sqlerrd[2] % FETCH_ARRAY;
+        }else{
+            records = FETCH_ARRAY;
+        }
+        OutPut(sdp, records);
+        if( sqlca.sqlcode == NODATA ){
+            break;
+        }
+    }
+
+    if( OUTBYTE > 0 ){
+        FlashBuffer();
+    }
+#ifdef DEBUG
+fprintf(debug, "Fetch End Total=%d\n", sqlca.sqlerrd[2]);
+#endif
+    EXEC SQL CLOSE C;
+
+    if( sqlca.sqlerrd[2] == 0 ){
+        return NODATA;
+    }else{
+        return SUCCESS;
+    }
+}
+
+/*********
+* Get bind variable from standard input.
+*********/
+int
+GetValue(char *value, int C, char* S)
+{
+    *value = '\0';
+
+    strcpy(FUNCTION, "GetValue");
+
+#ifdef DEBUG
+fprintf(debug,"GetValue\n");
+#endif
+    printf( "Please set value %.*s = ", C, S );
+    fgets( value, 256, stdin );
+    printf( "old: \"%.*s\" new:\"%s\"\n", C, S, value );
+    return 0;
+}
+
+#ifdef DEBUG
+int
+printda(SQLDA *dp, int i, char* str, int h)
+{
+    fprintf(debug, "printda[%d][%d]=\n",h,i);
+    if( strchr( str, 'N' ) != NULL )
+        fprintf(debug,"N%d ", dp->N);
+    if( strchr( str, 'V' ) != NULL && dp->V[i] != NULL )
+        fprintf(debug,"V%s Vlen%d", dp->V[i]+(h*dp->L[i]), strlen(dp->V[i]+h*(dp->L[i])));
+    if( strchr( str, 'L' ) != NULL && dp->L != NULL )
+        fprintf(debug,"L%d ", dp->L[i]);
+    if( strchr( str, 'T' ) != NULL && dp->T != NULL )
+        fprintf(debug,"T%d ", dp->T[i]);
+    if( strchr( str, 'I' ) != NULL && dp->I[i] != NULL )
+        fprintf(debug,"I%d ", *dp->I[i]);
+    if( strchr( str, 'F' ) != NULL )
+        fprintf(debug,"F%d ", dp->F);
+    if( strchr( str, 'S' ) != NULL && dp->S[i] != NULL )
+        fprintf(debug,"S%s ", dp->S[i]);
+    if( strchr( str, 'M' ) != NULL && dp->M != NULL )
+        fprintf(debug,"M%d ", dp->M[i]);
+    if( strchr( str, 'C' ) != NULL && dp->C != NULL )
+        fprintf(debug,"C%d ", dp->C[i]);
+    if( strchr( str, 'X' ) != NULL && dp->X != NULL )
+        fprintf(debug,"X%d ", dp->X[i]);
+    if( strchr( str, 'Y' ) != NULL && dp->Y != NULL )
+        fprintf(debug,"Y%d ", dp->Y[i]);
+    if( strchr( str, 'Z' ) != NULL && dp->Z != NULL )
+        fprintf(debug,"Z%d ", dp->Z[i]);
+    fputs( "\n", debug);
+    return 0;
+}
+#endif
+

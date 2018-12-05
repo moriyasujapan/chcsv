@@ -1,0 +1,51 @@
+****************************************************************
+    chcsv version 2.0, Copyright (C) 1995 Batayan.
+
+    chcsv comes with ABSOLUTELY NO WARRANTY.
+    This is free software, and you are welcome to redistribute it
+    under certain conditions, GPL.
+
+    chcsv is distributed under the GNU General Public License.
+
+****************************************************************
+
+* Compilation of chcsv needs BOTH C-compiler and Pro*C. If you do not have
+* both, please get the binary executable one.
+
+[How to create chcsv]
+  Extract the file that you downloaded, and execute 'make'.
+
+[How to extract]
+ o If you get chcsv_v??.tar.Z, (mainly for solaris users)
+
+  $ uncompress chcsv_v??.tar.Z
+  $ tar xvf chcsv_v??.tar
+ 
+ o If you get chcsv_v??.tar.gz when you have gzip (or similar tools),
+
+  $ gzip -dc chcsv_v??.tar.gz | tar xvf -
+
+[How to compile]
+  Just do 'make'.
+
+  $ make
+
+** About 'proc.mk'.
+ chcsv needs to compile with 'proc.mk', which is distributed with Pro*C.
+ This file is in various directories which depends on the versions of Pro*C.
+ See BUILD file included in chcsv_v??.tar.gz, and the 'proc.mk' is in 
+ differenct directory in your environment. It's sometimes 'demo_proc.mk'.
+ Please edit BUILD before 'make'.
+
+* How to find 'proc.mk'?
+
+ $ find $ORACLE_HOME -name proc.mk -print
+
+
+******************************************************************
+ If you have any PROBLEMS with chcsv, or find BUGS, please mailto
+
+     kawabata@personal.email.ne.jp  (Batayan)
+
+ Thank you !!!
+******************************************************************

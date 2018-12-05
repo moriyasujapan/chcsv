@@ -1,0 +1,64 @@
+****************************************************************
+    chcsv version 2.0, Copyright (C) 1995 Batayan.
+
+    chcsv comes with ABSOLUTELY NO WARRANTY.
+    This is free software, and you are welcome to redistribute it
+    under certain conditions, GPL.
+
+    chcsv is distributed under the GNU General Public License.
+
+****************************************************************
+
+注）chcsv をコンパイルするためには、CコンパイラーとPro*Cコンパイラーが
+必要です。もしお持ちでないかたはバイナリをダウンロードしてください。
+
+[インストール方法]
+適当なディレクトリに、ダウンロードしたファイルを置き、
+解凍してから make してください。
+
+[解凍方法]
+chcsv_v??.tar.Z の場合
+
+  $  uncompress chcsv_v??.tar.Z
+  $  tar xvf chcsv_v??.tar
+
+chcsv_v??.tar.gz の場合
+
+  $ gzip -dc chcsv_v??.tar.gz | tar xvf -
+
+[コンパイル方法]
+ 上記のディレクトリで make を実行してください。
+
+ ※ proc.mk について
+ chcsvではmakeを行うのに、proc.mk というPro*Cに付属している
+makefileを使用します。このファイルはPro*Cのバージョンにより
+さまざまな場所に格納されています。chcsvのダウンロードファイルに
+含まれているBUILDの中のproc.mkのパスが、あなたの環境と違っている
+場合、BUILDを変更してください。
+
+proc.mkの見つけ方：
+
+ $ find $ORACLE_HOME -name proc.mk -print
+
+ proc.mkが見つからない人は、ダウンロードファイルに含まれる以下の
+ ５つのファイルを手動でコンパイル・リンクしてください。
+
+ chcsv.pc
+ sqlda.pc
+ Option.pc
+ OutPut.pc
+ Signal.pc
+
+ 詳細についてはお手持ちのPro*Cのマニュアルをご覧ください。
+
+[転載及び著作権について]
+
+　chcsv はフリーソフトウェアです。version 1.5よりGPLに準じています。
+ 
+******************************************************************
+ If you have any PROBLEMS with chcsv, or find BUGS, please mailto
+
+     kawabata@personal.email.ne.jp  (Batayan)
+
+ Thank you !!!
+******************************************************************

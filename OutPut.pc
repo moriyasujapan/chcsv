@@ -1,0 +1,102 @@
+/**
+*   OutPut.pc - Output the result of SQL sentence of "SELECT".
+*
+*   Copyright (C) 1995 Batayan. (kawabata@personal.email.ne.jp)
+*
+*  This program is free software; you can redistribute it and/or modify
+*  it under the terms of the GNU General Public License as published by
+*  the Free Software Foundation; either version 2 of the License, or
+*  any later version.
+*
+*  This program is distributed in the hope that it will be useful,
+*  but WITHOUT ANY WARRANTY; without even the implied warranty of
+*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*  GNU General Public License for more details.
+*
+*  You should have received a copy of the GNU General Public License
+*  along with this program; if not, write to the Free Software
+*  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+*
+*  1999/3/11 Update: For ARRAY FETCH. by Batayan.
+*  1999/3/28 Update: Change the way to write from fputs to "write".
+*
+**/
+
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#define _SQLEXTERN_ 
+#include "extern.h"
+
+#define SQLCA_STORAGE_CLASS extern 
+EXEC SQL INCLUDE sqlca.h; 
+EXEC SQL INCLUDE sqlda.h; 
+EXEC SQL INCLUDE sqlhead.h; 
+EXEC SQL INCLUDE chcsv.h; 
+
+int
+OutPut(SQLDA *dp, int numOfFetch)
+{
+    int h; /* Loop for rows */
+    int i; /* Loop for columns */
+    int j; /* Loop for charctors */
+    int prec,scale;
+
+    strcpy(FUNCTION, "OutPut");
+
+#ifdef DEBUG
+fprintf(debug,"OutPut:numOfFetch=%d\n",numOfFetch );
+#endif
+
+    for( h = 0; h < numOfFetch; h++ ){
+        for( i = 0; i < dp->N; i++ ){
+
+#ifdef DEBUG2
+printda(dp, i, "NVL", h);
+#endif
+ /* Output enclosure */    
+            if( *( numflg + i ) != 2 && ENCLOSE != (char)NULL ){
+                OUTBUF[OUTBYTE++] = ENCLOSE;
+            }
+/* Output columns */
+            j = 0;
+            while( *( dp->V[i] + ( dp->L[i] * h ) + j ) != (char)NULL ){
+                OUTBUF[OUTBYTE++] = *( dp->V[i] + ( dp->L[i] * h ) + j++ );
+            }
+ /* Output enclosure */    
+            if( *( numflg + i ) != 2 && ENCLOSE != (char)NULL ){
+                OUTBUF[OUTBYTE++] = ENCLOSE;
+            }
+ /* Output terminator except the last column */    
+            if( i != dp->N - 1 ){
+                OUTBUF[OUTBYTE++] = TERMINATE;
+            }
+        }
+/* Output line terminator */
+        OUTBUF[OUTBYTE++] = '\n';
+        TOTALRECORDS++;
+        BUFFERED++;
+
+/* When to reach maximun records of buffer */
+        if( BUFFERED =  OUTRECORDS ){
+#ifdef DEBUG
+fprintf(debug, "TOTALRECORDS=%d OUTRECORDS=%d h=%d OUTBYTE=%d\n", TOTALRECORDS, OUTRECORDS, h, OUTBYTE);
+#endif
+            FlashBuffer();
+        }
+    }
+
+    return 0;
+}
+
+int
+FlashBuffer()
+{
+    OUTBUF[OUTBYTE] = (char)NULL;
+    if( write(fdout, OUTBUF, OUTBYTE ) != OUTBYTE ){
+        SysOraErr("write");
+    }
+    OUTBYTE = 0;
+    BUFFERED = 0;
+}

@@ -1,0 +1,105 @@
+/**
+*   Signal.pc - Catch signals and finish chcsv.
+*
+*   Copyright (C) 1995 Batayan. (kawabata@personal.email.ne.jp)
+*
+*  This program is free software; you can redistribute it and/or modify
+*  it under the terms of the GNU General Public License as published by
+*  the Free Software Foundation; either version 2 of the License, or
+*  any later version.
+*
+*  This program is distributed in the hope that it will be useful,
+*  but WITHOUT ANY WARRANTY; without even the implied warranty of
+*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*  GNU General Public License for more details.
+*
+*  You should have received a copy of the GNU General Public License
+*  along with this program; if not, write to the Free Software
+*  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+*
+*
+**/
+
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+
+#define _SQLEXTERN_ 
+#include "extern.h"
+
+#define SQLCA_STORAGE_CLASS extern 
+EXEC SQL INCLUDE sqlca.h; 
+EXEC SQL INCLUDE sqlda.h; 
+EXEC SQL INCLUDE sqlhead.h; 
+EXEC SQL INCLUDE chcsv.h; 
+
+#define BADSIG (void (*)())-1
+
+int
+CatchSignal()
+{
+    strcpy(FUNCTION, "CatchSignal");
+
+    SetSig(SIGHUP, Cleanup);
+    SetSig(SIGINT, Cleanup);
+    SetSig(SIGQUIT, Cleanup);
+    SetSig(SIGTERM, Cleanup);
+    SetSig(SIGBUS, Cleanup);
+    SetSig(SIGSEGV, Cleanup);
+}
+
+void
+SetSig(int sig, void (*fcn)())
+{
+    void (*sts)();
+
+    strcpy(FUNCTION, "SetSig");
+    sts = signal(sig, SIG_IGN);
+    if( sts == SIG_DFL ){
+        if( signal(sig, fcn) == BADSIG){
+            SysErr("signal");
+        }
+    }else if( sts == SIG_IGN ){
+        return;
+    }else{
+        SysErr("signal");
+    }
+}
+
+void
+Cleanup(int sig)
+{
+
+    char sig_mes[128];
+    if( signal(sig, SIG_IGN) == BADSIG ){
+        SysErr("signal");
+    }
+    switch(sig){
+    case SIGHUP:
+        strcpy(sig_mes, "Terminated by hangup signal");
+        break;
+    case SIGINT:
+        strcpy(sig_mes, "Terminated by interrupt signal");
+        break;
+    case SIGBUS:
+        strcpy(sig_mes, "Terminated by internal Error: bus error");
+        break;
+    case SIGSEGV:
+        strcpy(sig_mes, "Terminated by internal Error: segmentation violation");
+        break;
+    default:
+        strcpy(sig_mes, "Terminated by signal");
+    }
+
+    fprintf(debug, "--------------------------------------------------------------------------------\n");
+    fprintf(debug, "%s: Catch signal %d\n", LDNAME, sig);
+    fprintf(debug, "%s\n", sig_mes);
+    fprintf(debug, "%s : Debugging Information\n", LDNAME);
+    fprintf(debug, "%s:\n", FUNCTION);
+    fprintf(debug, "--------------------------------------------------------------------------------\n");
+
+    FileClose();
+
+    exit(1);
+}

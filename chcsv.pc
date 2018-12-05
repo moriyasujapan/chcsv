@@ -1,0 +1,362 @@
+/**
+*   chcsv.pc - This is for conveting data from Oracle to text file (CSV format)
+*
+*   Copyright (C) 1995 Batayan. (kawabata@personal.email.ne.jp)
+*
+*  This program is free software; you can redistribute it and/or modify
+*  it under the terms of the GNU General Public License as published by
+*  the Free Software Foundation; either version 2 of the License, or
+*  any later version.
+*
+*  This program is distributed in the hope that it will be useful,
+*  but WITHOUT ANY WARRANTY; without even the implied warranty of
+*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*  GNU General Public License for more details.
+*
+*  You should have received a copy of the GNU General Public License
+*  along with this program; if not, write to the Free Software
+*  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+*
+**/
+
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <errno.h>
+
+ /* This means that this source file contains "main" function" */
+#define _SQLMAIN_ 
+#include "extern.h"  /* You should include all of your Pro*C source files */
+
+EXEC SQL INCLUDE sqlhead.h;
+EXEC SQL INCLUDE sqlca.h;
+EXEC SQL INCLUDE sqlda.h;
+EXEC SQL INCLUDE chcsv.h;   /* This contains global variables */
+
+/**
+  main()
+**/
+int 
+main(int argc, char **argv)
+{
+    int sts;
+    int i,j,k;
+
+#ifdef LOGFILE
+    if( (debug = fopen(LOGFILE, "w")) == NULL ){
+        fprintf(stderr, "Can't open logfile\n");
+        exit(1);
+    }
+#else
+    debug = stderr;
+#endif
+    strcpy(FUNCTION, "main");
+
+#ifdef DEBUG
+    fprintf(debug, "chcsv main start\n");
+#endif
+
+/* Catch signals */
+    CatchSignal();
+
+/* Set initial values */
+    sts = 0;
+    LONGSIZE = 1000;       /* Initial size for long type */
+    FETCH_ARRAY = 100;     /* Size of fetch array */
+    OUTRECORDS = 100;      /* Number of buffer records to output */
+    bdSize = 1000;         /* Size of description for combined variable */
+    bvSize = 20;           /* Max size of combined variables */
+    sdSize = 1000;         /* Size of description for selected list */
+    svSize = 20;           /* Max size of names of selected list */
+    SQLBUFSIZE = 1048576;  /* Initail size for sql sentence */
+    LDNAME = (char *)malloc(strlen(*argv) + 1);
+    if( LDNAME == NULL ){
+        SysErr("LDNAME");
+    }
+    strcpy( LDNAME, *argv );  /* Name of load module */
+    TERMINATE = ',';       /* Termination character for each columns */
+    ENCLOSE = (char)NULL;  /* Enclosure character for each columns */
+    VERTICAL = FALSE;      /* Initial set for vertical output */
+    APPEND = FALSE;        /* Initial set for append file flag */
+    HEADER = FALSE;        /* Initial set for header */
+    NODATAEXIT = FALSE;    /* Exit status is zero when nodata */
+    TOTALRECORDS = 0;      /* Total number of output records */
+
+/* Analize options */
+    Option(argc,argv); 
+
+/* Open files */
+    FileOpen();
+#ifdef DEBUG
+    if( OUTFILE != NULL ){
+        fprintf(debug, "OUTFILE=%s\n", OUTFILE);
+    }
+    if( INFILE != NULL ){
+        fprintf(debug, "INFILE =%s\n", INFILE);
+    }
+    fprintf(debug, "t=%c e=%c\n", TERMINATE, ENCLOSE);
+    i = 0;
+    while( *(VALUE + i) != (char *)NULL ){
+        fprintf(debug, "VALUE%d %s\n", i, *(VALUE + i));
+        i++;
+    }
+#endif
+/* Read a input file */
+    FileRead();
+/* Connect and login to Oracle */
+    if( oralogin() != SUCCESS ){
+        OraErr("LOGIN", sqlca.sqlcode);
+    }
+/* Analize sql sentence */
+    if( SetDA( SQLBUF ) != SUCCESS ){
+        OraErr("SetDA", sqlca.sqlcode);
+    }
+/* FETCH */
+    if( sdp->N > 0 ){
+        sts = FetDA();
+        if( sts != SUCCESS && sts != NODATA ){
+            OraErr("FetDA", sqlca.sqlcode);
+        }
+    }
+/* Free occupied memory area */
+    freearea();
+/* Close files */
+    FileClose();
+/* Logout from Oracle */
+    oralogout();
+/* Return to OS */
+
+    if( NODATAEXIT ){
+        return sts;
+    }else{
+        return 0;
+    }
+}
+/****
+  int FileOpen() 
+  Open a file which was indicated at command arguments.
+  If not, we use standard input and output
+****/
+int
+FileOpen()
+{
+    int i;
+
+    strcpy(FUNCTION, "FileOpen");
+/* Open a output file */
+    if( OUTFILE != NULL ){
+        if( APPEND ){
+            if( (fdout = open(OUTFILE, O_WRONLY | O_CREAT | O_APPEND, 0666)) == -1 ){
+                SysErr(OUTFILE);
+            }
+        }else{
+            if( (fdout = open(OUTFILE, O_WRONLY | O_CREAT | O_TRUNC, 0666)) ==-1 ){
+                SysErr(OUTFILE);
+            }
+        }
+    }else{
+/* When not be indicated, use standard input */
+        fdout = 1;
+    }
+/* Open a input file which describs sql sentence */
+    if( INFILE != NULL ){
+        if( (fpin = fopen(INFILE, "r")) == NULL ){
+            SysErr(INFILE);
+        }
+    }else{
+/* When not be indicated, use standard input */
+        fpin = stdin;
+    }
+
+    return 0;
+}
+/**
+  int FileClose()
+  Close all files
+**/
+int
+FileClose()
+{
+    strcpy(FUNCTION, "FileClose");
+
+#ifdef DEBUG
+    fprintf(debug, "FileClose\n");
+#endif
+#ifdef LOGFILE
+    fclose(debug);
+#endif
+/* Close a output file */
+    if( OUTFILE != NULL ){
+        close(fdout);
+    }
+/* Close a input file */
+    if( INFILE != NULL ){
+        fclose(fpin);
+    }
+    
+    return 0;
+}
+/**
+  int FileRead()
+  Read a input file and set sql sentence to variable
+**/
+int
+FileRead()
+{
+    int i;
+    
+    strcpy(FUNCTION, "FileRead");
+    if( ( SQLBUF = (char *)malloc(SQLBUFSIZE) ) == NULL ){
+        SysErr("SQLBUF");
+    }
+    for( i = 0;; i++ ){
+/* If the initial size is not enough */
+        if( i == SQLBUFSIZE ){
+            SQLBUFSIZE *= 2;
+#ifdef DEBUG
+fprintf(debug,"i=%d realloc size %d\n", i,sizeof(char)*SQLBUFSIZE );
+#endif
+            if( ( SQLBUF = (char *)realloc(SQLBUF, SQLBUFSIZE) ) == NULL ){
+                SysErr("SQLBUF");
+            }
+        }
+/* Set sql sentence to buffer variable */
+        if( ( *(SQLBUF + i) = getc(fpin) ) == EOF ){
+            *(SQLBUF + i) = '\0';
+            break;
+        }
+    }
+#ifdef DEBUG
+fprintf(debug, "-------------------SQL COMMAND--------------------\n");
+fprintf(debug, "%s", SQLBUF);
+fprintf(debug, "-------------------SQL COMMAND--------------------\n");
+fprintf(debug, "SQLBUFlen=%d\n", strlen(SQLBUF) );
+#endif
+    return 0;
+}
+/**
+  Login to Oracle
+**/
+int
+oralogin()
+{
+    strcpy(FUNCTION, "oralogin");
+
+#ifdef DEBUG
+fprintf(debug,"oralogin\n");
+#endif
+    EXEC SQL CONNECT :logname;
+    return sqlca.sqlcode;
+}
+/**
+  Logout from Oracle
+**/
+int
+oralogout()
+{
+    strcpy(FUNCTION, "oralogout");
+
+#ifdef DEBUG
+fprintf(debug,"oralogout\n");
+#endif
+    EXEC SQL COMMIT WORK RELEASE;
+    return sqlca.sqlcode;
+}
+/**
+  Free allocated memory space
+**/
+int
+freearea()
+{
+    int i;
+    strcpy(FUNCTION, "freearea");
+
+#ifdef DEBUG
+fprintf(debug, "freearea\n");
+fputs("bdp\n", debug);
+#endif
+    for( i = 0; i < bdp->F; i++ ){
+        free(bdp->V[i]);
+    }
+    sqlclu(bdp);
+    free(numflg);
+    for( i = 0; i < sdp->F; i++ ){
+        free(sdp->V[i]);
+        free(sdp->I[i]);
+    }
+    sqlclu(sdp);
+    i = 0;        
+    while( *( VALUE + i ) != NULL ){
+        free(*( VALUE + i++ ));
+    }
+    free(VALUE);
+    
+    return 0;
+}
+
+/* Erro process for system */
+int
+SysErr( char *msg )
+{
+#ifndef __USE_BSD
+#ifndef __USE_GNU
+    extern int errno, sys_nerr;
+    extern char *sys_errlist[];
+#endif
+#endif
+
+    char suffix[3];
+
+    strcpy(FUNCTION, "SysErr");
+    fprintf(debug, "%s: %s Error, Code=%d", LDNAME, msg, errno);
+    if( errno > 0 && errno < sys_nerr ){
+        fprintf(debug, ":%s\n", sys_errlist[errno]);
+    }else{
+        fprintf(debug, "\n");
+    }
+    exit(errno);
+}
+/* Error process for system (in case to roll back) */
+int
+SysOraErr( char *msg )
+{
+#ifndef __USE_BSD
+#ifndef __USE_GNU
+    extern int errno, sys_nerr;
+    extern char *sys_errlist[];
+#endif
+#endif
+
+    char suffix[3];
+
+    strcpy(FUNCTION, "SysOraErr");
+    fprintf(debug, "%s: %s Error, Code=%d", LDNAME, msg, errno);
+    if( errno > 0 && errno < sys_nerr ){
+        fprintf(debug, ":%s\n", sys_errlist[errno]);
+    }else{
+        fprintf(debug, "\n");
+    }
+/* Roll Back */
+    EXEC SQL ROLLBACK WORK RELEASE;
+    exit(errno);
+}
+/**
+  int OraErr( char *cmd, int code )
+  Write error messages to standard error output
+  when Oracle errors happen
+**/
+int
+OraErr(char *cmd, int code)
+{
+    strcpy(FUNCTION, "OraErr");
+
+/* Output an error message */
+    fprintf(debug, "%s: %s Error, Code=%d:%s\n"
+        ,LDNAME, cmd, code, sqlca.sqlerrm.sqlerrmc);
+/* Do rollback and disconnect */
+    EXEC SQL ROLLBACK WORK RELEASE;
+    exit(code);
+}
+
+/******************** End of chscv.pc ********************/

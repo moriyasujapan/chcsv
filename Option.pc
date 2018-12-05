@@ -1,0 +1,206 @@
+/**
+*   Option.pc - Analyze options set in the command line.
+*   Copyright (C) 1995 Batayan. (kawabata@personal.email.ne.jp)
+*
+*  This program is free software; you can redistribute it and/or modify
+*  it under the terms of the GNU General Public License as published by
+*  the Free Software Foundation; either version 2 of the License, or
+*  any later version.
+*
+*  This program is distributed in the hope that it will be useful,
+*  but WITHOUT ANY WARRANTY; without even the implied warranty of
+*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*  GNU General Public License for more details.
+*
+*  You should have received a copy of the GNU General Public License
+*  along with this program; if not, write to the Free Software
+*  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+*
+**/
+
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _SQLEXTERN_
+#include "extern.h"
+
+#define SQLCA_STORAGE_CLASS extern
+EXEC SQL INCLUDE sqlca.h;
+EXEC SQL INCLUDE sqlda.h;
+EXEC SQL INCLUDE sqlhead.h;
+EXEC SQL INCLUDE chcsv.h;
+
+int
+Option(int argc, char** argv)
+{
+    int i;
+    int cntValue = 0; /* For combined variables */
+    int ValueSize = MAXVALUE;
+
+#ifdef DEBUG
+    fprintf(stderr, "Option\n");
+#endif
+
+    strcpy(FUNCTION, "Option");    
+    if( argc < 2 ){
+        OptionErr();
+    }
+/* LOGIN ID */
+    strcpy((char *)logname.arr, *( argv + 1 ));
+    logname.len = (short)strlen((char *)logname.arr);
+    argv += 2;
+    argc--;
+/* Allocate memory for array of combined variable */
+    if( ( VALUE = (char **)calloc(sizeof(char*), ValueSize) ) == NULL ){
+        SysErr("VALUE");
+    }
+/* Analize options */
+    while( --argc ){
+    /* If this is prefix or not */
+        if( **argv != '-' ){
+    /* Allocate space for value of this combined variable */
+            *(VALUE + cntValue) = (char *)malloc(sizeof(char) * strlen(*argv) + 1);
+            if( *( VALUE + cntValue ) == NULL ){
+                SysErr("VALUE");
+            }
+    /* Set combined variable */
+            strcpy(*(VALUE + cntValue++), *argv++);
+    /* If the number of combined variables is greater than initial size */
+            if( cntValue >= ValueSize ){
+                ValueSize += MAXVALUE;
+                VALUE = (char **)realloc(VALUE, sizeof(char *) * ValueSize);
+                if( VALUE == NULL ){
+                    SysErr("VALUE");
+                }
+            }
+            *( VALUE + cntValue ) = (char *)NULL;
+            continue;
+        }
+    /* Analize options */
+        switch( *(*argv + 1) ){
+        case 'h':  /* Header Flag */
+            HEADER = TRUE;
+            break;
+        case 'f':  /* Number of fetch array records */
+            if( *(*argv + 2) != (char)NULL ){
+                FETCH_ARRAY = atoi( *argv + 2 );
+            }else if( argc-- > 1 ){
+                FETCH_ARRAY = atoi ( *++argv );
+            }else{
+                OptionErr();
+            }
+            break;
+        case 'b':  /* Number of fetch array records */
+            if( *(*argv + 2) != (char)NULL ){
+                OUTRECORDS = atoi( *argv + 2 );
+            }else if( argc-- > 1 ){
+                OUTRECORDS = atoi ( *++argv );
+            }else{
+                OptionErr();
+            }
+            break;
+        case 'a':  /* Append File flag */
+            APPEND = TRUE;
+        case 'o':  /* Filename of output */
+            if( *(*argv + 2) != (char)NULL ){
+                if( (OUTFILE = (char *)malloc(strlen(*argv) + 1)) == NULL ){
+                    SysErr("OUTFILE");
+                }
+                strcpy(OUTFILE, *argv + 2);
+            }else if( argc-- > 1 ){
+                if( (OUTFILE = (char *)malloc(strlen(*++argv) + 1)) == NULL ){
+                    SysErr("OUTFILE");
+                }
+                strcpy(OUTFILE, *argv);
+            }else{
+                OptionErr();
+            }
+            break;
+        case 'i':  /* Filename of input for sql sentence */
+            if( *(*argv + 2) != (char)NULL ){
+                INFILE = (char *)malloc(strlen(*argv) + 1);
+                strcpy(INFILE, *argv + 2);
+            }else if( argc-- > 1 ){
+                INFILE = (char *)malloc(strlen(*++argv) + 1);
+                strcpy(INFILE, *argv);
+            }else{
+                OptionErr();
+            }
+            break;
+        case 't':  /* Terminator */
+            if( *(*argv + 2) != (char)NULL ){
+                TERMINATE = *(*argv + 2);
+            }else if( argc-- > 1 ){
+                TERMINATE = **++argv;
+            }else{
+                OptionErr();
+            }
+            break;
+        case 'e':  /* Enclosure */
+            if( *(*argv + 2) != (char)NULL ){
+                ENCLOSE = *(*argv + 2);
+            }else if( argc-- > 1 ){
+                ENCLOSE = **++argv;
+            }else{
+                OptionErr();
+            }
+            break;
+        case 'l':  /* LONG type length */
+            if( *(*argv + 2) != (char)NULL ){
+                LONGSIZE = atoi( *argv + 2 );
+            }else if( argc-- > 1 ){
+                LONGSIZE = atoi ( *++argv );
+            }else{
+                OptionErr();
+            }
+            break;
+        case 'v':  /* Vertical Output */
+            VERTICAL = TRUE;
+            break;
+        case 'n':  /* Vertical Output */
+            NODATAEXIT = TRUE;
+            break;
+        default:
+            OptionErr();
+        }
+        argv++;
+    }
+    if( VERTICAL ){
+        TERMINATE= '\n';
+    }
+    
+    return 0;
+
+}
+/**
+   Finalize function when option error happens
+**/
+int
+OptionErr()
+{
+    strcpy(FUNCTION, "OptionErr");    
+
+    fprintf( stderr, "%s Version %3.2f, Copyright (C) 1995 Batayan.\n", LDNAME, VERSION );
+
+    fprintf( stderr, "Usage: %s userid/passwd\n", LDNAME );
+    fprintf( stderr, "\t[-o Output Filename]\n" );
+    fprintf( stderr, "\t[-a Appended Output Filename]\n" );
+    fprintf( stderr, "\t[-i Input Filename]\n" );
+    fprintf( stderr, "\t[-e Enclosure]\n" );
+    fprintf( stderr, "\t[-t Terminater]\n" );
+    fprintf( stderr, "\t[-l Length of Long Type]\n" );
+    fprintf( stderr, "\t[-f Array size of fetch]\n" );
+    fprintf( stderr, "\t[-b Buffer size of output]\n" );
+    fprintf( stderr, "\t[-v] [-h] [-n]\n" );
+    fprintf( stderr, "\t[const] [const] ....\n" );
+    fprintf( stderr, "*********************************************************************\n" );
+    fprintf( stderr, "    chcsv is distributed under the GNU General Public License.\n" );
+    fprintf( stderr, "    chcsv comes with ABSOLUTELY NO WARRANTY.\n" );
+    fprintf( stderr, "    This is free software, and you are welcome to redistribute it\n" );
+    fprintf( stderr, "    under certain conditions, GPL.\n" );
+    fprintf( stderr, "    If you have any PROBLEMS with chcsv, or find BUGS, please mailto\n\n" );
+    fprintf( stderr, "       kawabata@personal.email.ne.jp\n\n" );
+    fprintf( stderr, "     Thank you !!!\n" );
+    fprintf( stderr, "*********************************************************************\n" );
+    exit(1);
+}

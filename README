@@ -1,0 +1,118 @@
+****************************************************************
+    chcsv version 2.0, Copyright (C) 1999 Batayan.
+
+    chcsv comes with ABSOLUTELY NO WARRANTY.
+    This is free software, and you are welcome to redistribute it
+    under certain conditions, GPL.
+
+    chcsv is distributed under the GNU General Public License.
+
+****************************************************************
+
+Usage: chcsv    userid/password
+                [-o Output Filename]
+                [-a Appended Output Filename]
+                [-i Input Filename] 
+                [-e Enclosure] 
+                [-t Terminater]
+                [-l Long Type Size]
+                [-f Array size of fetch]
+                [-b Buffer size of output]
+                [-v] [-h] [-n]
+                [const] [const] ....
+
+[OPTIONS]
+     userid/password : 
+         Must be the first argument. In case of remote login, 
+         it is like userid/password@remote-host.
+
+     -o : Output file. default is standard output.
+
+     -a : Output file which is appended.
+
+     -i : SQL command file. default is standard input.
+          
+     -e : Enclosure, excepting numeric data columns. default is nothing.
+     
+     -t : Terminater. default is ','.
+          
+     -l : Max size of long type (bytes). default is 1000.
+
+     -f : Array size of fetch. default is 100.
+
+     -b : Buffer size of output. default is 100.
+
+     -h : Add header which are list of select.
+
+     -v : Write data vertically.
+
+     -n : Exit status is not zero when no data found.
+
+     [const]: Bind variable.
+
+[DESCRIPTION]
+     The data converter chcsv analyzes "SQL sentence" that it reads from 
+    standard input (or a file indicated by "-i" option). 
+    If the "SQL sentence" contains "SELECT", chcsv writes data 
+    to the standard output (or a file indicated by "-o" option)
+    as CSV(plane-text) format.
+
+     You can set "bind variables" in your WHERE condition. Bind variables
+     should be specified by "&". The max length is 20.
+     chcsv will take place bind variables into your words when it executes.
+
+     You can insert comments from "/*" to "*/", just you usually do in SQLs.
+
+     Both -f and -b options affect the performance very much. but when you set
+     them big value, you need a lot of memory on your machine.
+
+     chcsv exits with zero status even when no data is found, unless
+     "-n" option is indicated.
+
+[EXAMPLES]
+
+  1. Read standard input and write the result to standard output.
+
+    $ echo "select user,sysdate from dual" | chcsv scott/tiger
+    SCOTT,01-JAN-95
+
+  2. Set -e option and write file1.
+
+   $ echo "select user,sysdate from dual" | chcsv scott/tiger -e\" -o file1
+   $ cat file1
+   "SCOTT","01-JAN-95"
+
+  3. Declare a bind variable and set value when executing.
+  $ cat test.sql
+  select * from emp
+  where empno = &empno
+
+  $ chcsv scott/tiger -e\" 7900
+  7900,"JAMES","CLERK",7698,"81-12-03",950,,30
+
+
+[HISTORY]
+
+2.0  1999-03-29
+     Array fetch is available. -h and -a options are added.
+
+1.5  1997-05-31
+     Fix the bug for cutting the tail of date type.
+
+1.2  1996-07-31
+     Follow the some bugs.
+
+1.1  1995-03-31
+     Allow SQL command that dose not contain "select".
+
+1.00 1995-01-31
+     Beta version.
+
+
+****************************************************************
+    If you have any PROBLEMS with chcsv, or find BUGS, please mailto
+
+        kawabata@personal.email.ne.jp  (Batayan)      
+
+    Thank you !!!
+****************************************************************
