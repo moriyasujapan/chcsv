@@ -28,8 +28,8 @@
  /* This means that this source file contains "main" function" */
 #define _SQLMAIN_ 
 #include "extern.h"  /* You should include all of your Pro*C source files */
+#include "sqlhead.h"
 
-EXEC SQL INCLUDE sqlhead.h;
 EXEC SQL INCLUDE sqlca.h;
 EXEC SQL INCLUDE sqlda.h;
 EXEC SQL INCLUDE chcsv.h;   /* This contains global variables */

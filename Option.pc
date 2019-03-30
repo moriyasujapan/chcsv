@@ -23,11 +23,11 @@
 #include <stdlib.h>
 #define _SQLEXTERN_
 #include "extern.h"
+#include "sqlhead.h"
 
 #define SQLCA_STORAGE_CLASS extern
 EXEC SQL INCLUDE sqlca.h;
 EXEC SQL INCLUDE sqlda.h;
-EXEC SQL INCLUDE sqlhead.h;
 EXEC SQL INCLUDE chcsv.h;
 
 int

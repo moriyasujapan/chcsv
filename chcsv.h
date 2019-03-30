@@ -78,8 +78,6 @@ EXTERN int FetDA(void);
 EXTERN int OutPut(SQLDA *sqlda, int numOfFetch);
 EXTERN int OutPutVer(SQLDA *dp, int numOfFetch);
 EXTERN int freearea(void);
-EXTERN SQLDA *sqlclu(SQLDA *sqlda);     
-EXTERN SQLDA *sqlald(int ValueCount, int NameSize, int IndexNameSize);
 EXTERN int printda(SQLDA *dp, int column_id, char* string, int row_id);
 EXTERN int CatchSignal();
 EXTERN void SetSig(int sig, void (*fcn)());
