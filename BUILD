@@ -8,7 +8,7 @@
 ##############################################################
 # Sometimes proc.mk is under following directory.
 ##############################################################
- make -f $ORACLE_HOME/precomp/demo/proc/proc.mk build \
+ make -f $ORACLE_HOME/precomp/demo/proc/demo_proc.mk build \
     EXE=chcsv OBJS="chcsv.o sqlda.o Option.o OutPut.o Signal.o"
 ##############################################################
 #
